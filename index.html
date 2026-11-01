@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Expenses</title>
+<style>
+:root{--bg:#0b1020;--panel:#121a2d;--panel2:#182238;--text:#edf2ff;--muted:#9aa8c2;--line:#26334c;--accent:#8b9cff;--green:#52d6a2;--red:#ff7d89}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#1c2850 0,transparent 34%),var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh;padding:28px 16px}
+main{max-width:760px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}.eyebrow{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.13em;text-transform:uppercase}h1{font-size:clamp(25px,5vw,34px);margin:4px 0}.sub{color:var(--muted);margin:0}.currency{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}.stat,.panel{background:rgba(18,26,45,.94);border:1px solid var(--line);border-radius:17px;padding:17px}.stat small{color:var(--muted)}.amount{font-size:27px;font-weight:750;margin-top:5px;letter-spacing:-.03em}.stat.today .amount{color:var(--green)}
+.panel{margin-bottom:16px}.panel h2{font-size:17px;margin:0 0 14px}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}label{font-size:12px;color:var(--muted);font-weight:650}input,select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:12px;font:inherit;outline:none}input:focus,select:focus{border-color:var(--accent)}input::placeholder{color:#73819c}.actions{display:flex;gap:9px;margin-top:14px}.btn{border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:#10162a}.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.toolbar h2{margin:0}.toolbar input{max-width:170px;padding:9px}.expense{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}.expense:last-child{border-bottom:0;padding-bottom:0}.emoji{width:42px;height:42px;display:grid;place-items:center;background:var(--panel2);border-radius:12px;font-size:20px;flex:none}.details{flex:1;min-width:0}.details strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.details small{color:var(--muted)}.right{text-align:right;white-space:nowrap}.right strong{display:block}.item-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}.tiny{background:none;border:0;color:var(--muted);font-size:12px;padding:2px;cursor:pointer}.tiny.delete{color:var(--red)}.empty{text-align:center;color:var(--muted);padding:28px 8px}.foot{color:var(--muted);font-size:12px;text-align:center;margin:18px 0}.hidden{display:none!important}
+@media(max-width:520px){body{padding:20px 12px}.formgrid{grid-template-columns:1fr}.field.full{grid-column:auto}.summary{gap:9px}.stat,.panel{padding:14px}.amount{font-size:23px}.top{align-items:flex-start}.currency{max-width:100px}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div><div class="eyebrow">Personal finance</div><h1>Daily Expenses</h1><p class="sub">Small spends add up. Keep track, one day at a time.</p></div>
+    <select class="currency" id="currency" aria-label="Currency"><option value="₹">INR ₹</option><option value="$">USD $</option><option value="€">EUR €</option></select>
+  </header>
+  <section class="summary">
+    <div class="stat today"><small>Today's spending</small><div class="amount" id="todayTotal">₹0</div></div>
+    <div class="stat"><small>This month's spending</small><div class="amount" id="monthTotal">₹0</div></div>
+  </section>
+  <section class="panel">
+    <h2 id="formTitle">Add an expense</h2>
+    <form id="expenseForm">
+      <div class="formgrid">
+        <div class="field"><label for="amount">AMOUNT</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="e.g. 150" required></div>
+        <div class="field"><label for="category">CATEGORY</label><select id="category"><option>Food</option><option>Travel</option><option>Shopping</option><option>Bills</option><option>Health</option><option>Education</option><option>Other</option></select></div>
+        <div class="field full"><label for="note">NOTE</label><input id="note" maxlength="90" placeholder="What did you spend on? (e.g. lunch, bus ticket)"></div>
+        <div class="field full"><label for="date">DATE</label><input id="date" type="date" required></div>
+      </div>
+      <div class="actions"><button class="btn primary" id="saveBtn" type="submit">+ Add expense</button><button class="btn secondary hidden" id="cancelBtn" type="button">Cancel</button></div>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="toolbar"><h2>Expense notes</h2><input id="filterDate" type="month" aria-label="Filter by month"></div>
+    <div id="expenseList"></div>
+  </section>
+  <p class="foot">Your entries stay in this browser on this device. No account or backend needed.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const key = 'daily-expenses-v1';
+let expenses = JSON.parse(localStorage.getItem(key) || '[]');
+let editingId = null;
+const today = new Date();
+const localDate = d => { const x = new Date(d.getTime()-d.getTimezoneOffset()*60000); return x.toISOString().slice(0,10); };
+$('date').value = localDate(today);
+$('filterDate').value = localDate(today).slice(0,7);
+const icons = {Food:'🍜',Travel:'🚌',Shopping:'🛍️',Bills:'🧾',Health:'💊',Education:'📚',Other:'📝'};
+const money = n => $('currency').value + Number(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+function persist(){localStorage.setItem(key,JSON.stringify(expenses));render();}
+function render(){
+ const todayKey=localDate(new Date()), monthKey=todayKey.slice(0,7);
+ $('todayTotal').textContent=money(expenses.filter(e=>e.date===todayKey).reduce((s,e)=>s+e.amount,0));
+ $('monthTotal').textContent=money(expenses.filter(e=>e.date.startsWith(monthKey)).reduce((s,e)=>s+e.amount,0));
+ const filter=$('filterDate').value;
+ const shown=expenses.filter(e=>!filter||e.date.startsWith(filter)).sort((a,b)=>b.date.localeCompare(a.date)||b.created-b.created);
+ const list=$('expenseList');
+ if(!shown.length){list.innerHTML='<div class="empty">No expenses here yet.<br>Add your first expense above.</div>';return;}
+ list.innerHTML=shown.map(e=>`<div class="expense">
+ <div class="emoji">${icons[e.category]||'📝'}</div>
+ <div class="details"><strong>${escapeHtml(e.note||e.category)}</strong><small>${escapeHtml(e.category)} · ${new Date(e.date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</small></div>
+ <div class="right"><strong>${money(e.amount)}</strong><div class="item-actions"><button class="tiny" data-edit="${e.id}">Edit</button><button class="tiny delete" data-delete="${e.id}">Delete</button></div></div>
+ </div>`).join('');
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+$('expenseForm').addEventListener('submit',ev=>{
+ ev.preventDefault();
+ const amount=Number($('amount').value);
+ if(!Number.isFinite(amount)||amount<=0)return;
+ const item={id:editingId||String(Date.now()),amount,category:$('category').value,note:$('note').value.trim(),date:$('date').value,created:Date.now()};
+ if(editingId){expenses=expenses.map(e=>e.id===editingId?{...item,created:e.created}:e);editingId=null;}
+ else expenses.push(item);
+ $('expenseForm').reset();$('date').value=localDate(new Date());$('formTitle').textContent='Add an expense';$('saveBtn').textContent='+ Add expense';$('cancelBtn').classList.add('hidden');persist();
+});
+$('expenseList').addEventListener('click',ev=>{
+ const edit=ev.target.dataset.edit, del=ev.target.dataset.delete;
+ if(edit){const e=expenses.find(x=>x.id===edit);if(!e)return;editingId=e.id;$('amount').value=e.amount;$('category').value=e.category;$('note').value=e.note;$('date').value=e.date;$('formTitle').textContent='Edit expense';$('saveBtn').textContent='Save changes';$('cancelBtn').classList.remove('hidden');$('amount').focus();}
+ if(del&&confirm('Delete this expense?')){expenses=expenses.filter(e=>e.id!==del);if(editingId===del)resetForm();persist();}
+});
+function resetForm(){editingId=null;$('expenseForm').reset();$('date').value=localDate(new Date());$('formTitle').textContent='Add an expense';$('saveBtn').textContent='+ Add expense';$('cancelBtn').classList.add('hidden');}
+$('cancelBtn').addEventListener('click',resetForm);
+$('filterDate').addEventListener('change',render);
+$('currency').addEventListener('change',render);
+render();
+</script>
+</body>
+</html>
